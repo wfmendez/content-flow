@@ -1,14 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { getTrends, generateContent, deleteTrend, fetchTrends } from '../api/client'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ExternalLink, Trash2, Wand2, RefreshCw, CheckCircle2, Clock, Rss, MessageSquare } from 'lucide-react'
+import {
+  ExternalLink, Trash2, Wand2, RefreshCw, CheckCircle2, Clock,
+  Rss, MessageSquare, AlertTriangle
+} from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useActivity } from '../context/ActivityContext'
+import { DEMO_TRENDS } from '../data/demoData'
+import { SkeletonCard } from '../components/SkeletonCard'
+
+// ── Config ─────────────────────────────────────────────────────────────────────
 
 const SOURCE_CONFIG = {
-  rss:     { label: 'RSS',    icon: Rss,            cls: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' },
-  reddit:  { label: 'Reddit', icon: MessageSquare,  cls: 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' },
-  twitter: { label: 'Twitter',icon: MessageSquare,  cls: 'bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400' },
+  rss:     { label: 'RSS',    icon: Rss,           cls: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' },
+  reddit:  { label: 'Reddit', icon: MessageSquare, cls: 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' },
+  twitter: { label: 'Twitter',icon: MessageSquare, cls: 'bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400' },
 }
 
 const FILTERS = [
@@ -17,8 +25,10 @@ const FILTERS = [
   ['processed', 'Procesadas'],
 ]
 
+// ── Score bar ─────────────────────────────────────────────────────────────────
+
 function ScoreBar({ score }) {
-  const pct = (score / 10) * 100
+  const pct   = (score / 10) * 100
   const color = score >= 8 ? 'bg-emerald-500' : score >= 6 ? 'bg-amber-500' : 'bg-red-400'
   return (
     <div className="flex items-center gap-2">
@@ -30,33 +40,170 @@ function ScoreBar({ score }) {
   )
 }
 
-export default function TrendsPage() {
-  const [trends, setTrends] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState({})
-  const [filter, setFilter] = useState('all')
+// ── Inline confirm ─────────────────────────────────────────────────────────────
 
-  const load = async () => {
+function ConfirmDeleteRow({ onConfirm, onCancel }) {
+  return (
+    <div className="flex items-center gap-3 mt-3 px-4 py-2.5 rounded-xl animate-fade-in
+                    bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
+      <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+      <p className="text-sm text-red-700 dark:text-red-300 flex-1">¿Eliminar esta tendencia?</p>
+      <button onClick={onConfirm}
+        className="px-3 py-1 rounded-lg text-xs font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors">
+        Eliminar
+      </button>
+      <button onClick={onCancel}
+        className="px-3 py-1 rounded-lg text-xs font-semibold
+                   text-slate-600 dark:text-galaxy-300 bg-white dark:bg-galaxy-800
+                   border border-slate-200 dark:border-galaxy-600 hover:border-slate-300 transition-colors">
+        Cancelar
+      </button>
+    </div>
+  )
+}
+
+// ── Trend card ─────────────────────────────────────────────────────────────────
+
+function TrendCard({ trend, onGenerate, onDelete, generating }) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const src = SOURCE_CONFIG[trend.source] || SOURCE_CONFIG.rss
+  const SrcIcon = src.icon
+
+  return (
+    <div className="card p-5
+                    hover:border-brand-200 dark:hover:border-brand-500/40
+                    hover:shadow-md dark:hover:shadow-glow-sm
+                    transition-all duration-200">
+      <div className="flex items-start gap-4">
+        {/* Source icon */}
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${src.cls}`}>
+          <SrcIcon className="w-4 h-4" />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {/* Meta row */}
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className={`badge ${src.cls}`}>{src.label}</span>
+            {trend.subreddit && (
+              <span className="text-xs text-slate-400 dark:text-galaxy-500">r/{trend.subreddit}</span>
+            )}
+            <span className="text-xs text-slate-400 dark:text-galaxy-500 ml-auto">
+              {formatDistanceToNow(new Date(trend.created_at), { addSuffix: true, locale: es })}
+            </span>
+          </div>
+
+          {/* Title */}
+          <h3 className="font-semibold text-slate-900 dark:text-white text-sm leading-snug mb-2 line-clamp-2">
+            {trend.title}
+          </h3>
+
+          {/* Summary */}
+          {trend.summary && (
+            <p className="text-xs text-slate-500 dark:text-galaxy-400 line-clamp-1 mb-3">
+              {trend.summary}
+            </p>
+          )}
+
+          {/* Footer */}
+          <div className="flex items-center gap-4">
+            <div className="w-28">
+              <ScoreBar score={trend.relevance_score} />
+            </div>
+            {trend.processed
+              ? <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  <CheckCircle2 className="w-3 h-3" /> Generado
+                </span>
+              : <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                  <Clock className="w-3 h-3" /> Pendiente
+                </span>
+            }
+          </div>
+
+          {/* Inline delete confirm */}
+          {confirmDelete && (
+            <ConfirmDeleteRow
+              onConfirm={() => { onDelete(trend.id); setConfirmDelete(false) }}
+              onCancel={() => setConfirmDelete(false)}
+            />
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {trend.url && (
+            <a href={trend.url} target="_blank" rel="noopener noreferrer" className="btn-ghost p-2">
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
+          {!trend.processed && (
+            <button
+              onClick={() => onGenerate(trend)}
+              disabled={generating}
+              className="btn-primary py-1.5 text-xs"
+            >
+              <Wand2 className={`w-3.5 h-3.5 ${generating ? 'animate-pulse' : ''}`} />
+              {generating ? 'Generando…' : 'Generar'}
+            </button>
+          )}
+          <button
+            onClick={() => setConfirmDelete(c => !c)}
+            className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+
+export default function TrendsPage() {
+  const [trends, setTrends]       = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [generating, setGenerating] = useState({})
+  const [filter, setFilter]       = useState('all')
+  const [isDemo, setIsDemo]       = useState(false)
+
+  const { addActivity } = useActivity()
+
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const params = filter !== 'all' ? { processed: filter === 'processed' } : {}
       const { data } = await getTrends(params)
       setTrends(data)
+      setIsDemo(false)
     } catch {
-      toast.error('Error cargando tendencias')
+      const filtered = filter === 'all'
+        ? DEMO_TRENDS
+        : filter === 'processed'
+          ? DEMO_TRENDS.filter(t => t.processed)
+          : DEMO_TRENDS.filter(t => !t.processed)
+      setTrends(filtered)
+      setIsDemo(true)
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
 
-  useEffect(() => { load() }, [filter])
+  useEffect(() => { load() }, [load])
 
   const handleGenerate = async (trend) => {
     setGenerating(g => ({ ...g, [trend.id]: true }))
     try {
-      await generateContent(trend.id)
-      toast.success('✨ Generando contenido…')
-      setTimeout(load, 2000)
+      if (isDemo) {
+        await new Promise(r => setTimeout(r, 1500)) // simulate delay
+        setTrends(t => t.map(x => x.id === trend.id ? { ...x, processed: true } : x))
+        addActivity('generate', `Contenido generado para "${trend.title.slice(0, 45)}…"`)
+        toast.success('✨ Contenido generado (demo)')
+      } else {
+        await generateContent(trend.id)
+        addActivity('generate', `Generando contenido para "${trend.title.slice(0, 45)}…"`)
+        toast.success('✨ Generando contenido…')
+        setTimeout(load, 2000)
+      }
     } catch {
       toast.error('Error al generar contenido')
     } finally {
@@ -65,10 +212,16 @@ export default function TrendsPage() {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar esta tendencia?')) return
+    if (isDemo) {
+      setTrends(t => t.filter(x => x.id !== id))
+      addActivity('delete', 'Tendencia eliminada (demo)')
+      toast.success('Tendencia eliminada')
+      return
+    }
     try {
       await deleteTrend(id)
       setTrends(t => t.filter(x => x.id !== id))
+      addActivity('delete', 'Tendencia eliminada')
       toast.success('Tendencia eliminada')
     } catch {
       toast.error('Error al eliminar')
@@ -76,8 +229,13 @@ export default function TrendsPage() {
   }
 
   const handleFetch = async () => {
+    if (isDemo) {
+      toast('Backend no disponible — modo demo activo', { icon: '🔌' })
+      return
+    }
     try {
       await fetchTrends()
+      addActivity('fetch', 'Monitoreo de tendencias iniciado')
       toast.success('🔍 Monitoreo iniciado')
     } catch {
       toast.error('Error al iniciar monitoreo')
@@ -85,24 +243,27 @@ export default function TrendsPage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-6 lg:p-8 max-w-4xl mx-auto">
 
       {/* Header */}
       <div className="flex items-start justify-between mb-6 animate-fade-in">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Tendencias</h1>
           <p className="text-sm text-slate-500 dark:text-galaxy-400 mt-1">
-            {trends.length} tendencias · Fuentes: RSS, Reddit
+            {isDemo
+              ? <span className="text-amber-600 dark:text-amber-400 font-medium">Modo demo · {trends.length} tendencias</span>
+              : `${trends.length} tendencias · Fuentes: RSS, Reddit`
+            }
           </p>
         </div>
         <button onClick={handleFetch} className="btn-primary">
           <RefreshCw className="w-4 h-4" />
-          Monitorear
+          <span className="hidden sm:inline">Monitorear</span>
         </button>
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-6 flex-wrap">
         {FILTERS.map(([val, label]) => (
           <button
             key={val}
@@ -119,9 +280,10 @@ export default function TrendsPage() {
 
       {/* Lista */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-galaxy-500">
-          <RefreshCw className="w-8 h-8 animate-spin mb-3 text-brand-400" />
-          <p className="text-sm">Cargando tendencias…</p>
+        <div className="space-y-3">
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={1} />
         </div>
       ) : trends.length === 0 ? (
         <div className="card flex flex-col items-center justify-center py-20">
@@ -138,86 +300,15 @@ export default function TrendsPage() {
         </div>
       ) : (
         <div className="space-y-3 animate-slide-up">
-          {trends.map(trend => {
-            const src = SOURCE_CONFIG[trend.source] || SOURCE_CONFIG.rss
-            const SrcIcon = src.icon
-            return (
-              <div key={trend.id}
-                className="card p-5 flex items-start gap-4
-                           hover:border-brand-200 dark:hover:border-brand-500/40
-                           hover:shadow-md dark:hover:shadow-glow-sm
-                           transition-all duration-200"
-              >
-                {/* Source icon */}
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${src.cls}`}>
-                  <SrcIcon className="w-4 h-4" />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  {/* Meta row */}
-                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                    <span className={`badge ${src.cls}`}>{src.label}</span>
-                    {trend.subreddit && (
-                      <span className="text-xs text-slate-400 dark:text-galaxy-500">r/{trend.subreddit}</span>
-                    )}
-                    <span className="text-xs text-slate-400 dark:text-galaxy-500 ml-auto">
-                      {formatDistanceToNow(new Date(trend.created_at), { addSuffix: true, locale: es })}
-                    </span>
-                  </div>
-
-                  {/* Title */}
-                  <h3 className="font-semibold text-slate-900 dark:text-white text-sm leading-snug mb-2 line-clamp-2">
-                    {trend.title}
-                  </h3>
-
-                  {/* Summary */}
-                  {trend.summary && (
-                    <p className="text-xs text-slate-500 dark:text-galaxy-400 line-clamp-1 mb-3">
-                      {trend.summary}
-                    </p>
-                  )}
-
-                  {/* Footer */}
-                  <div className="flex items-center gap-4">
-                    <div className="w-28">
-                      <ScoreBar score={trend.relevance_score} />
-                    </div>
-                    {trend.processed
-                      ? <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                          <CheckCircle2 className="w-3 h-3" /> Generado
-                        </span>
-                      : <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
-                          <Clock className="w-3 h-3" /> Pendiente
-                        </span>
-                    }
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {trend.url && (
-                    <a href={trend.url} target="_blank" rel="noopener noreferrer" className="btn-ghost p-2">
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  )}
-                  {!trend.processed && (
-                    <button
-                      onClick={() => handleGenerate(trend)}
-                      disabled={generating[trend.id]}
-                      className="btn-primary py-1.5 text-xs"
-                    >
-                      <Wand2 className={`w-3.5 h-3.5 ${generating[trend.id] ? 'animate-pulse' : ''}`} />
-                      {generating[trend.id] ? 'Generando…' : 'Generar'}
-                    </button>
-                  )}
-                  <button onClick={() => handleDelete(trend.id)}
-                    className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )
-          })}
+          {trends.map(trend => (
+            <TrendCard
+              key={trend.id}
+              trend={trend}
+              generating={!!generating[trend.id]}
+              onGenerate={handleGenerate}
+              onDelete={handleDelete}
+            />
+          ))}
         </div>
       )}
     </div>
