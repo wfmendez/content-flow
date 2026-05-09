@@ -18,8 +18,10 @@
   body {
     @apply bg-slate-50 text-slate-900 antialiased transition-colors duration-300;
   }
-  .dark body {
-    @apply bg-galaxy-900 text-galaxy-50;
+  /* @apply no puede resolver custom colors en @layer base en Tailwind v3.4 — usar CSS directo */
+  html.dark body {
+    background-color: #0a0616; /* galaxy-900 */
+    color: #f0ecf8;            /* galaxy-50  */
   }
 
   * { @apply transition-colors duration-150; }
