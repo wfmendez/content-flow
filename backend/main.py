@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -7,11 +8,27 @@ from database import init_db
 from api.trends import router as trends_router
 from api.content import router as content_router
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Arranque: crear tablas si no existen
-    init_db()
+    # Arranque: crear tablas (reintenta hasta 5 veces para esperar a que
+    # PostgreSQL esté listo en Railway/Docker antes de crashear)
+    import time
+    for attempt in range(5):
+        try:
+            init_db()
+            logger.info("[DB] Tablas inicializadas correctamente.")
+            break
+        except Exception as e:
+            if attempt < 4:
+                wait = 3 * (attempt + 1)
+                logger.warning(f"[DB] No disponible (intento {attempt+1}/5). Reintentando en {wait}s... {e}")
+                time.sleep(wait)
+            else:
+                logger.error(f"[DB] No se pudo conectar tras 5 intentos: {e}")
+                raise
     yield
     # Cierre: (nada por ahora)
 
