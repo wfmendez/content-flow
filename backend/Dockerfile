@@ -5,11 +5,7 @@ ENV PYTHONPATH=/app \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd -r appuser \
-    && useradd -r -g appuser appuser
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
