@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --scrollbar-track: #f1f5f9;
+    --scrollbar-thumb: #cbd5e1;
+  }
+  .dark {
+    --scrollbar-track: #1e1535;
+    --scrollbar-thumb: #4a4e8f;
+  }
+
+  html { @apply scroll-smooth; }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased transition-colors duration-300;
+  }
+  .dark body {
+    @apply bg-galaxy-900 text-galaxy-50;
+  }
+
+  * { @apply transition-colors duration-150; }
+
+  ::-webkit-scrollbar       { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--scrollbar-track); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+}
+
+@layer components {
+  .card {
+    @apply bg-white dark:bg-galaxy-800 border border-slate-200 dark:border-galaxy-600
+           rounded-2xl shadow-sm dark:shadow-none;
+  }
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600
+           dark:hover:shadow-glow-sm text-white rounded-xl text-sm font-semibold
+           transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-2
+           text-slate-500 dark:text-galaxy-300 hover:text-slate-900 dark:hover:text-white
+           hover:bg-slate-100 dark:hover:bg-galaxy-700 rounded-xl text-sm font-medium
+           transition-all duration-200;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+}

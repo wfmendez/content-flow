@@ -1,0 +1,17 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+alembic==1.14.0
+pydantic==2.10.3
+pydantic-settings==2.6.1
+celery==5.4.0
+redis==5.2.1
+google-generativeai==0.8.3
+groq==0.13.0
+feedparser==6.0.11
+praw==7.8.1
+httpx==0.28.1
+python-dotenv==1.0.1
+python-multipart==0.0.19
+email-validator==2.2.0
