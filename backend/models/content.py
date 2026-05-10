@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Enum as SAEnum
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -52,6 +52,13 @@ class ContentDraft(Base):
     status = Column(SAEnum(StatusEnum), default=StatusEnum.pending)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # AI generation metadata — for transparency panel in UI
+    ai_model = Column(String(100))            # e.g. "gemini-1.5-flash"
+    prompt_used = Column(Text)                # full prompt sent to the model
+    tokens_input = Column(Integer)            # estimated input token count
+    tokens_output = Column(Integer)           # estimated output token count
+    generation_cost_usd = Column(Float)       # calculated cost in USD
 
     trend = relationship("Trend", back_populates="drafts")
     publish_jobs = relationship("PublishJob", back_populates="draft", cascade="all, delete-orphan")

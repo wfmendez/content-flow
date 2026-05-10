@@ -4,12 +4,83 @@ import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
   CheckCircle, XCircle, Send, Trash2, Edit3, Save, X,
-  ChevronDown, ChevronUp, FileText, Linkedin, Mail, BookOpen, AlertTriangle
+  ChevronDown, ChevronUp, FileText, Linkedin, Mail, BookOpen,
+  AlertTriangle, Cpu, ChevronRight
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useActivity } from '../context/ActivityContext'
 import { DEMO_DRAFTS } from '../data/demoData'
 import { SkeletonCard } from '../components/SkeletonCard'
+
+// ── AI transparency panel ──────────────────────────────────────────────────────
+
+function AiPanel({ draft }) {
+  const [open, setOpen] = useState(false)
+  const hasAi = draft.ai_model || draft.tokens_input
+
+  if (!hasAi) return null
+
+  const totalTokens = (draft.tokens_input ?? 0) + (draft.tokens_output ?? 0)
+  const cost = draft.generation_cost_usd != null
+    ? draft.generation_cost_usd < 0.001
+      ? `< $0.001`
+      : `$${draft.generation_cost_usd.toFixed(4)}`
+    : '—'
+
+  return (
+    <div className="border-t border-slate-100 dark:border-galaxy-700 mt-2">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-5 py-2.5 text-xs
+                   text-slate-400 dark:text-galaxy-500
+                   hover:text-brand-500 dark:hover:text-brand-400 transition-colors"
+      >
+        <Cpu className="w-3.5 h-3.5" />
+        <span className="font-medium">Transparencia IA</span>
+        <span className="ml-auto flex items-center gap-3">
+          <span className="font-mono">{draft.ai_model ?? '—'}</span>
+          <span>{totalTokens.toLocaleString()} tokens · {cost}</span>
+          <ChevronRight className={`w-3 h-3 transition-transform ${open ? 'rotate-90' : ''}`} />
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-5 pb-4 space-y-3 animate-fade-in">
+          {/* Stats row */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Modelo', value: draft.ai_model ?? '—' },
+              { label: 'Tokens entrada', value: (draft.tokens_input ?? 0).toLocaleString() },
+              { label: 'Tokens salida', value: (draft.tokens_output ?? 0).toLocaleString() },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-slate-50 dark:bg-galaxy-900/60 rounded-xl p-3 text-center">
+                <p className="text-xs text-slate-400 dark:text-galaxy-500 mb-0.5">{label}</p>
+                <p className="text-sm font-semibold text-slate-800 dark:text-galaxy-100 font-mono">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs text-slate-400 dark:text-galaxy-500">Costo estimado</span>
+            <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 font-mono">{cost}</span>
+          </div>
+
+          {/* Prompt used */}
+          {draft.prompt_used && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 dark:text-galaxy-400 mb-1.5">Prompt utilizado</p>
+              <div className="bg-slate-950/5 dark:bg-black/30 rounded-xl p-3 max-h-36 overflow-y-auto">
+                <pre className="text-xs text-slate-600 dark:text-galaxy-300 whitespace-pre-wrap font-mono leading-relaxed">
+                  {draft.prompt_used}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -173,6 +244,9 @@ function DraftCard({ draft, onApprove, onReject, onPublish, onDelete, onSave }) 
           )}
 
           {/* Action bar */}
+          {/* AI transparency panel */}
+          {!editing && <AiPanel draft={draft} />}
+
           {!editing && (
             <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-galaxy-700 flex-wrap">
               {draft.status === 'pending' && (<>

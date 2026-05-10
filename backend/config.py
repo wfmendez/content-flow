@@ -47,6 +47,17 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change_this_in_production"
     CORS_ORIGINS: str = "http://localhost:3000"
 
+    # Auth
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_HOURS: int = 8
+
+    # Demo user (hardcoded for portfolio — replace with DB users in production)
+    DEMO_EMAIL: str = "demo@contentflow.io"
+    DEMO_PASSWORD: str = "demo2024"
+
+    # Observability
+    SENTRY_DSN: str = ""
+
     @property
     def rss_feeds_list(self) -> List[str]:
         return [f.strip() for f in self.RSS_FEEDS.split(",") if f.strip()]

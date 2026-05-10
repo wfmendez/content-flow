@@ -7,8 +7,22 @@ from config import settings
 from database import init_db
 from api.trends import router as trends_router
 from api.content import router as content_router
+from api.auth import router as auth_router
 
 logger = logging.getLogger(__name__)
+
+# ── Sentry (optional — only active if SENTRY_DSN is configured) ───────────────
+if settings.SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        integrations=[FastApiIntegration(), SqlalchemyIntegration()],
+        traces_sample_rate=0.2,
+        environment=settings.APP_ENV,
+    )
+    logger.info("[Sentry] Inicializado correctamente.")
 
 
 @asynccontextmanager
@@ -50,7 +64,8 @@ app.add_middleware(
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(trends_router, prefix="/api")
+app.include_router(auth_router,    prefix="/api")
+app.include_router(trends_router,  prefix="/api")
 app.include_router(content_router, prefix="/api")
 
 

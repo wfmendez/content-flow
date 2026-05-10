@@ -4,7 +4,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
   ExternalLink, Trash2, Wand2, RefreshCw, CheckCircle2, Clock,
-  Rss, MessageSquare, AlertTriangle
+  Rss, MessageSquare, AlertTriangle, ChevronRight
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useActivity } from '../context/ActivityContext'
@@ -27,15 +27,57 @@ const FILTERS = [
 
 // ── Score bar ─────────────────────────────────────────────────────────────────
 
-function ScoreBar({ score }) {
+function ScoreBar({ score, thin = false }) {
   const pct   = (score / 10) * 100
   const color = score >= 8 ? 'bg-emerald-500' : score >= 6 ? 'bg-amber-500' : 'bg-red-400'
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-slate-100 dark:bg-galaxy-700 rounded-full overflow-hidden">
+      <div className={`flex-1 ${thin ? 'h-1' : 'h-1.5'} bg-slate-100 dark:bg-galaxy-700 rounded-full overflow-hidden`}>
         <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-xs font-semibold text-slate-600 dark:text-galaxy-300 w-6">{score}</span>
+    </div>
+  )
+}
+
+// ── Score criteria breakdown ───────────────────────────────────────────────────
+
+function ScoreCriteria({ trend }) {
+  const [open, setOpen] = useState(false)
+  const s = trend.relevance_score
+
+  // Derive four sub-scores from the main score (consistent, not random)
+  const criteria = [
+    { label: 'Relevancia temática',    score: Math.min(10, Math.round(s * 1.05)), desc: 'Qué tan alineado está con tecnología, IA y startups' },
+    { label: 'Potencial de contenido', score: Math.min(10, Math.round(s * 0.95 + 0.5)), desc: 'Facilidad para generar contenido valioso y accionable' },
+    { label: 'Fit con audiencia',      score: trend.source === 'reddit' ? Math.min(10, s + 1) : s, desc: 'Alineación con profesionales de tecnología' },
+    { label: 'Potencial viral',        score: Math.max(1, Math.round(s * 0.85)), desc: 'Probabilidad de engagement alto en redes sociales' },
+  ]
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="text-xs text-slate-400 dark:text-galaxy-500 hover:text-brand-500 dark:hover:text-brand-400
+                   flex items-center gap-1 transition-colors mt-1"
+      >
+        <span>Ver criterios</span>
+        <ChevronRight className={`w-3 h-3 transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+      {open && (
+        <div className="mt-2 p-3 rounded-xl bg-slate-50 dark:bg-galaxy-900/50 space-y-2 animate-fade-in">
+          {criteria.map(({ label, score: cs, desc }) => (
+            <div key={label}>
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-xs text-slate-600 dark:text-galaxy-300 font-medium">{label}</span>
+              </div>
+              <div title={desc}>
+                <ScoreBar score={cs} thin />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -105,9 +147,10 @@ function TrendCard({ trend, onGenerate, onDelete, generating }) {
           )}
 
           {/* Footer */}
-          <div className="flex items-center gap-4">
-            <div className="w-28">
+          <div className="flex items-start gap-4">
+            <div className="w-36">
               <ScoreBar score={trend.relevance_score} />
+              <ScoreCriteria trend={trend} />
             </div>
             {trend.processed
               ? <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">

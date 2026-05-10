@@ -1,10 +1,9 @@
-from generators.base import generate_with_gemini
+from generators.base import generate_with_tracking
 
 
 def generate_linkedin_post(title: str, summary: str, url: str) -> dict:
     """
-    Genera un post optimizado para LinkedIn en UNA sola llamada a Gemini.
-    El título interno se extrae de la primera línea del cuerpo generado.
+    Genera un post optimizado para LinkedIn con metadatos de IA incluidos.
     """
     prompt = f"""Eres un experto en marketing de contenidos en LinkedIn con 10 años de experiencia.
 Crea un post profesional para LinkedIn basado en esta tendencia.
@@ -29,7 +28,8 @@ REGLAS DEL CUERPO:
 - Máximo 3-4 emojis estratégicos
 - Escribe en español"""
 
-    raw = generate_with_gemini(prompt)
+    result = generate_with_tracking(prompt)
+    raw = result["text"]
 
     # Extraer título y cuerpo del formato estructurado
     title_line, body = "", raw
@@ -41,4 +41,9 @@ REGLAS DEL CUERPO:
     return {
         "title": title_line[:200] if title_line else title[:200],
         "body": body,
+        "prompt_used": prompt,
+        "ai_model": result["ai_model"],
+        "tokens_input": result["tokens_input"],
+        "tokens_output": result["tokens_output"],
+        "generation_cost_usd": result["generation_cost_usd"],
     }

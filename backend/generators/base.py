@@ -65,6 +65,40 @@ def _generate_with_groq(prompt: str) -> str:
     return chat.choices[0].message.content.strip()
 
 
+def estimate_tokens(text: str) -> int:
+    """Rough heuristic: ~4 chars per token (works across most LLMs)."""
+    return max(1, len(text) // 4)
+
+
+def calculate_cost_usd(input_tokens: int, output_tokens: int, model: str) -> float:
+    """
+    Approximate cost based on public pricing (as of 2025-01).
+    Gemini 1.5 Flash: $0.075/1M input · $0.30/1M output
+    Groq (Llama 3.3): effectively $0 on free tier
+    """
+    if "gemini" in model:
+        return round((input_tokens * 0.075 + output_tokens * 0.30) / 1_000_000, 6)
+    return 0.0
+
+
+def generate_with_tracking(prompt: str) -> dict:
+    """
+    Calls generate_with_gemini and returns text + AI metadata dict.
+    Used by generators to attach transparency info to each draft.
+    """
+    model = "gemini-1.5-flash" if _gemini_model else "llama-3.3-70b-versatile"
+    input_tokens = estimate_tokens(prompt)
+    text = generate_with_gemini(prompt)
+    output_tokens = estimate_tokens(text)
+    return {
+        "text": text,
+        "ai_model": model,
+        "tokens_input": input_tokens,
+        "tokens_output": output_tokens,
+        "generation_cost_usd": calculate_cost_usd(input_tokens, output_tokens, model),
+    }
+
+
 def score_trends_batch(items: List[Dict[str, Any]]) -> List[int]:
     """
     Puntúa una lista de trends en UNA sola llamada a la IA.

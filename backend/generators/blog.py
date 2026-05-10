@@ -1,11 +1,10 @@
 import re
-from generators.base import generate_with_gemini
+from generators.base import generate_with_tracking
 
 
 def generate_blog_post(title: str, summary: str, url: str) -> dict:
     """
-    Genera un artículo de blog en Markdown en UNA sola llamada a Gemini.
-    El título SEO se extrae del H1 generado en el cuerpo.
+    Genera un artículo de blog en Markdown con metadatos de IA incluidos.
     """
     prompt = f"""Eres un escritor técnico experto en tecnología, IA y startups.
 Crea un artículo de blog completo en formato Markdown.
@@ -26,7 +25,8 @@ INSTRUCCIONES:
 - Entre 600-900 palabras
 - Escribe en español"""
 
-    body = generate_with_gemini(prompt)
+    result = generate_with_tracking(prompt)
+    body = result["text"]
 
     # Extraer título del H1
     match = re.search(r'^#\s+(.+)$', body, re.MULTILINE)
@@ -35,4 +35,9 @@ INSTRUCCIONES:
     return {
         "title": seo_title[:200],
         "body": body,
+        "prompt_used": prompt,
+        "ai_model": result["ai_model"],
+        "tokens_input": result["tokens_input"],
+        "tokens_output": result["tokens_output"],
+        "generation_cost_usd": result["generation_cost_usd"],
     }

@@ -1,11 +1,10 @@
 import re
-from generators.base import generate_with_gemini
+from generators.base import generate_with_tracking
 
 
 def generate_newsletter_item(title: str, summary: str, url: str) -> dict:
     """
-    Genera un ítem de newsletter en HTML en UNA sola llamada a Gemini.
-    El título del email se extrae del <h2> generado.
+    Genera un ítem de newsletter en HTML con metadatos de IA incluidos.
     """
     prompt = f"""Eres el editor de una newsletter sobre tecnología, IA y startups.
 Escribe una sección de newsletter en HTML.
@@ -30,7 +29,8 @@ REGLAS:
 - Tono directo y valioso, sin relleno
 - Escribe en español"""
 
-    body = generate_with_gemini(prompt)
+    result = generate_with_tracking(prompt)
+    body = result["text"]
 
     # Extraer título del <h2>
     match = re.search(r'<h2[^>]*>(.*?)</h2>', body, re.IGNORECASE | re.DOTALL)
@@ -39,4 +39,9 @@ REGLAS:
     return {
         "title": email_title[:200],
         "body": body,
+        "prompt_used": prompt,
+        "ai_model": result["ai_model"],
+        "tokens_input": result["tokens_input"],
+        "tokens_output": result["tokens_output"],
+        "generation_cost_usd": result["generation_cost_usd"],
     }

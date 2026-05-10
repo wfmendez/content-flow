@@ -143,6 +143,12 @@ def generate_content_task(self, trend_id: int):
                     title=result.get("title", "")[:500],
                     body=result["body"],
                     status=StatusEnum.pending,
+                    # AI transparency metadata
+                    ai_model=result.get("ai_model"),
+                    prompt_used=result.get("prompt_used"),
+                    tokens_input=result.get("tokens_input"),
+                    tokens_output=result.get("tokens_output"),
+                    generation_cost_usd=result.get("generation_cost_usd"),
                 )
                 db.add(draft)
                 channels_generated.append(channel_str)

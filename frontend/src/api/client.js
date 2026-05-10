@@ -11,6 +11,26 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+// ── Auth interceptor — attaches JWT to every request ─────────────────────────
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('cf-token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+// ── Auto-logout on 401 ────────────────────────────────────────────────────────
+api.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('cf-token')
+      localStorage.removeItem('cf-user')
+      window.dispatchEvent(new Event('cf-logout'))
+    }
+    return Promise.reject(err)
+  }
+)
+
 // ── Trends ────────────────────────────────────────────────────────────────────
 export const getTrends = (params = {}) => api.get('/trends/', { params })
 export const getTrendStats = () => api.get('/trends/stats')

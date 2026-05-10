@@ -34,6 +34,17 @@ class PublishJobOut(BaseModel):
         from_attributes = True
 
 
+class AiMeta(BaseModel):
+    ai_model: Optional[str] = None
+    prompt_used: Optional[str] = None
+    tokens_input: Optional[int] = None
+    tokens_output: Optional[int] = None
+    generation_cost_usd: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
 class ContentDraftOut(BaseModel):
     id: int
     trend_id: int
@@ -45,6 +56,12 @@ class ContentDraftOut(BaseModel):
     updated_at: datetime
     trend: Optional[TrendSnippet]
     publish_jobs: List[PublishJobOut] = []
+    # AI transparency
+    ai_model: Optional[str] = None
+    prompt_used: Optional[str] = None
+    tokens_input: Optional[int] = None
+    tokens_output: Optional[int] = None
+    generation_cost_usd: Optional[float] = None
 
     class Config:
         from_attributes = True
