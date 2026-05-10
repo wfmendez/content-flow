@@ -1,14 +1,16 @@
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import { LayoutDashboard, TrendingUp, FileText, Zap, Sun, Moon, Menu, X,
-         CalendarDays, LogOut } from 'lucide-react'
+         CalendarDays, LogOut, Settings } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import Dashboard    from './pages/Dashboard'
 import TrendsPage   from './pages/TrendsPage'
 import ContentPage  from './pages/ContentPage'
 import CalendarPage from './pages/CalendarPage'
+import SettingsPage from './pages/SettingsPage'
 import LoginPage    from './pages/LoginPage'
 import { ActivityProvider } from './context/ActivityContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { SettingsProvider } from './context/SettingsContext'
 
 // ── Dark mode hook ────────────────────────────────────────────────────────────
 function useDarkMode() {
@@ -37,10 +39,11 @@ function usePendingCount() {
 
 // ── Nav items ────────────────────────────────────────────────────────────────
 const NAV = [
-  { to: '/',         label: 'Dashboard',  icon: LayoutDashboard },
-  { to: '/trends',   label: 'Tendencias', icon: TrendingUp },
-  { to: '/content',  label: 'Contenido',  icon: FileText },
-  { to: '/calendar', label: 'Calendario', icon: CalendarDays },
+  { to: '/',          label: 'Dashboard',   icon: LayoutDashboard },
+  { to: '/trends',    label: 'Tendencias',  icon: TrendingUp },
+  { to: '/content',   label: 'Contenido',   icon: FileText },
+  { to: '/calendar',  label: 'Calendario',  icon: CalendarDays },
+  { to: '/settings',  label: 'Configuración', icon: Settings },
 ]
 
 function NavItem({ to, label, icon: Icon, badge, onClick }) {
@@ -209,11 +212,12 @@ function AppLayout() {
 
           <main className="flex-1 overflow-auto">
             <Routes>
-              <Route path="/"         element={<Dashboard />} />
-              <Route path="/trends"   element={<TrendsPage />} />
-              <Route path="/content"  element={<ContentPage />} />
-              <Route path="/calendar" element={<CalendarPage />} />
-              <Route path="*"         element={<Navigate to="/" replace />} />
+              <Route path="/"          element={<Dashboard />} />
+              <Route path="/trends"    element={<TrendsPage />} />
+              <Route path="/content"   element={<ContentPage />} />
+              <Route path="/calendar"  element={<CalendarPage />} />
+              <Route path="/settings"  element={<SettingsPage />} />
+              <Route path="*"          element={<Navigate to="/" replace />} />
             </Routes>
           </main>
         </div>
@@ -226,10 +230,12 @@ function AppLayout() {
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/*"     element={<AppLayout />} />
-      </Routes>
+      <SettingsProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/*"     element={<AppLayout />} />
+        </Routes>
+      </SettingsProvider>
     </AuthProvider>
   )
 }

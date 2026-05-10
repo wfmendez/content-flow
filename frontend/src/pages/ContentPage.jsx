@@ -5,12 +5,14 @@ import { es } from 'date-fns/locale'
 import {
   CheckCircle, XCircle, Send, Trash2, Edit3, Save, X,
   ChevronDown, ChevronUp, FileText, Linkedin, Mail, BookOpen,
-  AlertTriangle, Cpu, ChevronRight
+  AlertTriangle, Cpu, ChevronRight, Copy
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useActivity } from '../context/ActivityContext'
 import { DEMO_DRAFTS } from '../data/demoData'
 import { SkeletonCard } from '../components/SkeletonCard'
+import { ContentPreview } from '../components/ContentPreview'
+import { PlatformValidator } from '../components/PlatformValidator'
 
 // ── AI transparency panel ──────────────────────────────────────────────────────
 
@@ -243,7 +245,12 @@ function DraftCard({ draft, onApprove, onReject, onPublish, onDelete, onSave }) 
             </div>
           )}
 
-          {/* Action bar */}
+          {/* Platform validator */}
+          {!editing && <PlatformValidator channel={draft.channel} body={draft.body} />}
+
+          {/* Content preview */}
+          {!editing && <ContentPreview draft={draft} />}
+
           {/* AI transparency panel */}
           {!editing && <AiPanel draft={draft} />}
 
@@ -276,6 +283,17 @@ function DraftCard({ draft, onApprove, onReject, onPublish, onDelete, onSave }) 
                   <Edit3 className="w-3.5 h-3.5" /> Editar
                 </button>
               )}
+
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(draft.body ?? '')
+                    .then(() => toast.success('📋 Copiado al portapapeles'))
+                    .catch(() => toast.error('No se pudo copiar'))
+                }}
+                className="btn-ghost py-1.5 text-xs"
+              >
+                <Copy className="w-3.5 h-3.5" /> Copiar
+              </button>
 
               <button onClick={() => { setConfirm('delete'); setOpen(true) }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold ml-auto

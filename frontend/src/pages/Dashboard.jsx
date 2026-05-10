@@ -9,6 +9,7 @@ import { useApiStatus } from '../hooks/useApiStatus'
 import { useActivity } from '../context/ActivityContext'
 import { DEMO_TREND_STATS, DEMO_CONTENT_STATS } from '../data/demoData'
 import { SkeletonStatCard } from '../components/SkeletonCard'
+import { RoiCalculator } from '../components/RoiCalculator'
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -226,6 +227,11 @@ export default function Dashboard() {
           </h2>
           <ActivityFeed activities={activities} />
         </div>
+      </div>
+
+      {/* ROI Calculator */}
+      <div className="mb-6">
+        <RoiCalculator />
       </div>
 
       {/* Quick actions */}
