@@ -5,7 +5,8 @@ import { es } from 'date-fns/locale'
 import {
   CheckCircle, XCircle, Send, Trash2, Edit3, Save, X,
   ChevronDown, ChevronUp, FileText, Linkedin, Mail, BookOpen,
-  AlertTriangle, Cpu, ChevronRight, Copy
+  AlertTriangle, Cpu, ChevronRight, Copy, History, RotateCcw,
+  CheckSquare, Square, Layers
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useActivity } from '../context/ActivityContext'
@@ -13,6 +14,7 @@ import { DEMO_DRAFTS } from '../data/demoData'
 import { SkeletonCard } from '../components/SkeletonCard'
 import { ContentPreview } from '../components/ContentPreview'
 import { PlatformValidator } from '../components/PlatformValidator'
+import { getDraftVersions, restoreVersion as apiRestoreVersion, bulkAction } from '../api/client'
 
 // ── AI transparency panel ──────────────────────────────────────────────────────
 
@@ -84,6 +86,115 @@ function AiPanel({ draft }) {
   )
 }
 
+// ── Version history panel ──────────────────────────────────────────────────────
+
+function VersionHistory({ draftId, isDemo, onRestored }) {
+  const [open, setOpen] = useState(false)
+  const [versions, setVersions] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [restoring, setRestoring] = useState(null)
+
+  const load = async () => {
+    if (isDemo) {
+      // Demo: show fake version history
+      setVersions([
+        { id: 1, version_number: 1, note: 'Generado por IA', created_at: new Date(Date.now() - 3600000).toISOString(), body: '(versión original de la IA)' },
+      ])
+      return
+    }
+    setLoading(true)
+    try {
+      const { data } = await getDraftVersions(draftId)
+      setVersions(data)
+    } catch { /* silent */ }
+    finally { setLoading(false) }
+  }
+
+  const handleOpen = () => {
+    if (!open) load()
+    setOpen(o => !o)
+  }
+
+  const handleRestore = async (v) => {
+    if (isDemo) {
+      toast.success(`Versión v${v.version_number} restaurada (demo)`)
+      setOpen(false)
+      return
+    }
+    setRestoring(v.id)
+    try {
+      const { data } = await apiRestoreVersion(draftId, v.id)
+      onRestored(data)
+      toast.success(`✅ Versión v${v.version_number} restaurada`)
+      setOpen(false)
+    } catch {
+      toast.error('Error al restaurar')
+    } finally {
+      setRestoring(null)
+    }
+  }
+
+  return (
+    <div className="border-t border-slate-100 dark:border-galaxy-700 mt-2">
+      <button
+        onClick={handleOpen}
+        className="w-full flex items-center gap-2 px-5 py-2.5 text-xs
+                   text-slate-400 dark:text-galaxy-500
+                   hover:text-brand-500 dark:hover:text-brand-400 transition-colors"
+      >
+        <History className="w-3.5 h-3.5" />
+        <span className="font-medium">Historial de versiones</span>
+        {versions.length > 0 && (
+          <span className="ml-1 px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-galaxy-700 text-slate-500 dark:text-galaxy-400">
+            {versions.length}
+          </span>
+        )}
+        <ChevronRight className={`w-3 h-3 ml-auto transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="px-5 pb-4 space-y-2 animate-fade-in">
+          {loading ? (
+            <p className="text-xs text-slate-400 dark:text-galaxy-500 py-2">Cargando versiones…</p>
+          ) : versions.length === 0 ? (
+            <p className="text-xs text-slate-400 dark:text-galaxy-500 py-2">Sin ediciones anteriores.</p>
+          ) : (
+            versions.map(v => (
+              <div key={v.id}
+                className="flex items-center justify-between gap-3 p-3 rounded-xl
+                           bg-slate-50 dark:bg-galaxy-900/60
+                           border border-slate-100 dark:border-galaxy-700">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-galaxy-200">
+                      v{v.version_number}
+                    </span>
+                    <span className="text-xs text-slate-400 dark:text-galaxy-500 truncate">{v.note}</span>
+                  </div>
+                  <p className="text-xs text-slate-400 dark:text-galaxy-500">
+                    {new Date(v.created_at).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleRestore(v)}
+                  disabled={restoring === v.id}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                             bg-white dark:bg-galaxy-800 border border-slate-200 dark:border-galaxy-600
+                             text-slate-600 dark:text-galaxy-300
+                             hover:border-brand-300 dark:hover:border-brand-500/50 transition-all flex-shrink-0"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  {restoring === v.id ? 'Restaurando…' : 'Restaurar'}
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Config ─────────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
@@ -140,7 +251,8 @@ function ConfirmRow({ message, onConfirm, onCancel, danger = true }) {
 
 // ── Draft card ─────────────────────────────────────────────────────────────────
 
-function DraftCard({ draft, onApprove, onReject, onPublish, onDelete, onSave }) {
+function DraftCard({ draft, onApprove, onReject, onPublish, onDelete, onSave, onRestored,
+                     selected, onToggleSelect, isDemo }) {
   const [open, setOpen]         = useState(false)
   const [editing, setEditing]   = useState(false)
   const [body, setBody]         = useState(draft.body)
@@ -157,11 +269,23 @@ function DraftCard({ draft, onApprove, onReject, onPublish, onDelete, onSave }) 
 
   return (
     <div className={`card overflow-hidden border-l-4 ${channel.border}
-                     hover:shadow-md dark:hover:shadow-glow-sm transition-all duration-200`}>
+                     hover:shadow-md dark:hover:shadow-glow-sm transition-all duration-200
+                     ${selected ? 'ring-2 ring-brand-400 dark:ring-brand-500' : ''}`}>
 
       {/* Header row */}
-      <div className="px-5 py-4 flex items-center gap-3 cursor-pointer"
-           onClick={() => { if (!confirm) setOpen(o => !o) }}>
+      <div className="px-5 py-4 flex items-center gap-3">
+        {/* Checkbox */}
+        <button
+          onClick={() => onToggleSelect(draft.id)}
+          className="flex-shrink-0 text-slate-300 dark:text-galaxy-600 hover:text-brand-500 dark:hover:text-brand-400 transition-colors"
+        >
+          {selected
+            ? <CheckSquare className="w-4 h-4 text-brand-500" />
+            : <Square className="w-4 h-4" />
+          }
+        </button>
+        <div className="flex-1 flex items-center gap-3 cursor-pointer min-w-0"
+             onClick={() => { if (!confirm) setOpen(o => !o) }}>
 
         <div className={`w-8 h-8 rounded-lg ${channel.cls} flex items-center justify-center flex-shrink-0`}>
           <ChanIcon className="w-4 h-4 text-white" />
@@ -185,8 +309,9 @@ function DraftCard({ draft, onApprove, onReject, onPublish, onDelete, onSave }) 
           </p>
         </div>
 
-        <div className="flex-shrink-0 text-slate-400 dark:text-galaxy-500">
-          {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          <div className="flex-shrink-0 text-slate-400 dark:text-galaxy-500">
+            {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </div>
         </div>
       </div>
 
@@ -254,6 +379,15 @@ function DraftCard({ draft, onApprove, onReject, onPublish, onDelete, onSave }) 
           {/* AI transparency panel */}
           {!editing && <AiPanel draft={draft} />}
 
+          {/* Version history */}
+          {!editing && (
+            <VersionHistory
+              draftId={draft.id}
+              isDemo={isDemo}
+              onRestored={(updated) => onRestored(draft.id, updated)}
+            />
+          )}
+
           {!editing && (
             <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-galaxy-700 flex-wrap">
               {draft.status === 'pending' && (<>
@@ -312,10 +446,14 @@ function DraftCard({ draft, onApprove, onReject, onPublish, onDelete, onSave }) 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function ContentPage() {
-  const [drafts, setDrafts]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter]   = useState('pending')
-  const [isDemo, setIsDemo]   = useState(false)
+  const [drafts, setDrafts]       = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [filter, setFilter]       = useState('pending')
+  const [isDemo, setIsDemo]       = useState(false)
+  const [selected, setSelected]   = useState(new Set())
+  const [total, setTotal]         = useState(0)
+  const [page, setPage]           = useState(0)
+  const PAGE_SIZE = 20
 
   const { addActivity } = useActivity()
 
@@ -328,25 +466,33 @@ export default function ContentPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    setSelected(new Set())
     try {
-      const params = filter !== 'all' ? { status: filter } : {}
-      const { data } = await getDrafts(params)
-      setDrafts(data)
+      const params = {
+        skip: page * PAGE_SIZE,
+        limit: PAGE_SIZE,
+        ...(filter !== 'all' ? { status: filter } : {}),
+      }
+      const res = await getDrafts(params)
+      setDrafts(res.data)
+      setTotal(parseInt(res.headers?.['x-total-count'] ?? res.data.length, 10))
       setIsDemo(false)
-      updateBadge(data)
+      updateBadge(res.data)
     } catch {
       // Demo mode fallback
       const filtered = filter === 'all'
         ? DEMO_DRAFTS
         : DEMO_DRAFTS.filter(d => d.status === filter)
       setDrafts(filtered)
+      setTotal(filtered.length)
       setIsDemo(true)
       updateBadge(DEMO_DRAFTS)
     } finally {
       setLoading(false)
     }
-  }, [filter, updateBadge])
+  }, [filter, page, updateBadge])
 
+  useEffect(() => { setPage(0) }, [filter])
   useEffect(() => { load() }, [load])
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -435,6 +581,38 @@ export default function ContentPage() {
     }
   }
 
+  // ── Selection helpers ─────────────────────────────────────────────────────
+  const toggleSelect = (id) =>
+    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  const toggleSelectAll = () =>
+    setSelected(s => s.size === drafts.length ? new Set() : new Set(drafts.map(d => d.id)))
+
+  const handleBulk = async (action) => {
+    const ids = [...selected]
+    if (!ids.length) return
+    if (isDemo) {
+      if (action === 'delete') setDrafts(d => d.filter(x => !ids.includes(x.id)))
+      else setDrafts(d => d.map(x => ids.includes(x.id) ? { ...x, status: action === 'approve' ? 'approved' : 'rejected' } : x))
+      setSelected(new Set())
+      toast.success(`${ids.length} borradores actualizados (demo)`)
+      return
+    }
+    try {
+      const { data } = await bulkAction(ids, action)
+      toast.success(`${data.affected} borradores actualizados`)
+      addActivity(action, `${data.affected} borradores en lote`)
+      load()
+    } catch {
+      toast.error('Error en acción en lote')
+    }
+  }
+
+  // ── Version restore callback ──────────────────────────────────────────────
+  const handleRestored = (draftId, updated) => {
+    setDrafts(d => d.map(x => x.id === draftId ? updated : x))
+  }
+
   const pendingCount = drafts.filter(d => d.status === 'pending').length
 
   return (
@@ -458,8 +636,8 @@ export default function ContentPage() {
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="flex gap-2 mb-6 flex-wrap">
+      {/* Filtros + select all */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
         {FILTERS.map(([val, label]) => (
           <button
             key={val}
@@ -472,7 +650,48 @@ export default function ContentPage() {
             {label}
           </button>
         ))}
+        {drafts.length > 0 && (
+          <button
+            onClick={toggleSelectAll}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium
+                       text-slate-500 dark:text-galaxy-400 hover:text-brand-500 dark:hover:text-brand-400 transition-colors"
+          >
+            {selected.size === drafts.length
+              ? <CheckSquare className="w-3.5 h-3.5 text-brand-500" />
+              : <Square className="w-3.5 h-3.5" />
+            }
+            {selected.size === drafts.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+          </button>
+        )}
       </div>
+
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl animate-fade-in
+                        bg-brand-50 dark:bg-brand-500/10
+                        border border-brand-200 dark:border-brand-500/30">
+          <Layers className="w-4 h-4 text-brand-500 flex-shrink-0" />
+          <span className="text-sm font-semibold text-brand-700 dark:text-brand-400 flex-1">
+            {selected.size} seleccionado{selected.size > 1 ? 's' : ''}
+          </span>
+          <button onClick={() => handleBulk('approve')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                       bg-emerald-500 hover:bg-emerald-600 text-white transition-colors">
+            <CheckCircle className="w-3.5 h-3.5" /> Aprobar todos
+          </button>
+          <button onClick={() => handleBulk('reject')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                       bg-white dark:bg-galaxy-800 border border-slate-200 dark:border-galaxy-600
+                       text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
+            <XCircle className="w-3.5 h-3.5" /> Rechazar todos
+          </button>
+          <button onClick={() => handleBulk('delete')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                       text-slate-500 dark:text-galaxy-400 hover:text-red-500 transition-colors">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       {loading ? (
@@ -504,9 +723,44 @@ export default function ContentPage() {
               onPublish={handlePublish}
               onDelete={handleDelete}
               onSave={handleSave}
+              onRestored={handleRestored}
+              selected={selected.has(draft.id)}
+              onToggleSelect={toggleSelect}
+              isDemo={isDemo}
             />
           ))}
         </div>
+
+        {/* Pagination */}
+        {total > PAGE_SIZE && (
+          <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100 dark:border-galaxy-700">
+            <span className="text-xs text-slate-400 dark:text-galaxy-500">
+              Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} de {total}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="px-3 py-1.5 rounded-xl text-xs font-medium
+                           bg-white dark:bg-galaxy-800 border border-slate-200 dark:border-galaxy-600
+                           text-slate-600 dark:text-galaxy-300
+                           disabled:opacity-40 hover:border-brand-300 dark:hover:border-brand-500/50 transition-all"
+              >
+                ← Anterior
+              </button>
+              <button
+                onClick={() => setPage(p => p + 1)}
+                disabled={(page + 1) * PAGE_SIZE >= total}
+                className="px-3 py-1.5 rounded-xl text-xs font-medium
+                           bg-white dark:bg-galaxy-800 border border-slate-200 dark:border-galaxy-600
+                           text-slate-600 dark:text-galaxy-300
+                           disabled:opacity-40 hover:border-brand-300 dark:hover:border-brand-500/50 transition-all"
+              >
+                Siguiente →
+              </button>
+            </div>
+          </div>
+        )}
       )}
     </div>
   )

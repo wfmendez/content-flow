@@ -2,13 +2,30 @@ import re
 from generators.base import generate_with_tracking
 
 
-def generate_newsletter_item(title: str, summary: str, url: str) -> dict:
+def generate_newsletter_item(
+    title: str,
+    summary: str,
+    url: str,
+    brand_name: str = "",
+    tone: str = "directo",
+    audience: str = "",
+) -> dict:
     """
     Genera un ítem de newsletter en HTML con metadatos de IA incluidos.
+    Acepta parámetros de voz de marca para personalizar el tono.
     """
+    brand_ctx = ""
+    if brand_name or tone or audience:
+        brand_ctx = f"""
+VOZ DE MARCA:
+- Marca: {brand_name or 'ContentFlow'}
+- Tono: {tone}
+- Audiencia objetivo: {audience or 'Profesionales de tecnología y startups'}
+"""
+
     prompt = f"""Eres el editor de una newsletter sobre tecnología, IA y startups.
 Escribe una sección de newsletter en HTML.
-
+{brand_ctx}
 Tendencia: {title}
 Contexto: {summary}
 Fuente: {url}
@@ -26,7 +43,7 @@ FORMATO REQUERIDO (HTML limpio, sin CSS externo):
 
 REGLAS:
 - Máximo 250 palabras
-- Tono directo y valioso, sin relleno
+- Tono {tone}, valioso, sin relleno
 - Escribe en español"""
 
     result = generate_with_tracking(prompt)

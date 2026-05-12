@@ -1,11 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Settings, Building2, Users, MessageSquare, Rss, Bell,
   Webhook, Plus, Trash2, Save, RotateCcw, CheckCircle,
-  Linkedin, BookOpen, Mail, ChevronDown
+  Linkedin, BookOpen, Mail, ChevronDown, Link2, Link2Off,
+  ExternalLink, AlertCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSettings, DEFAULT_SETTINGS } from '../context/SettingsContext'
+import { saveRemoteSettings, getRemoteSettings, getLinkedInStatus,
+         getLinkedInAuthUrl, disconnectLinkedIn } from '../api/client'
+import { useAuth } from '../context/AuthContext'
 
 const TONES = [
   { value: 'profesional',  label: 'Profesional',  desc: 'Serio, confiable, orientado a resultados' },
@@ -61,15 +65,82 @@ function Input({ value, onChange, placeholder, type = 'text' }) {
 
 export default function SettingsPage() {
   const { settings, update, reset } = useSettings()
+  const { user } = useAuth()
   const [newFeedUrl,   setNewFeedUrl]   = useState('')
   const [newFeedLabel, setNewFeedLabel] = useState('')
   const [newTopic,     setNewTopic]     = useState('')
-  const [saved, setSaved] = useState(false)
+  const [saved, setSaved]               = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [linkedIn, setLinkedIn]         = useState({ connected: false, configured: false, person_urn: null })
+  const isDemo = user?.isDemo
 
-  const handleSave = () => {
-    setSaved(true)
-    toast.success('✅ Configuración guardada')
-    setTimeout(() => setSaved(false), 2000)
+  // ── Load LinkedIn status + remote settings on mount ──────────────────────
+  useEffect(() => {
+    if (isDemo) return
+    getLinkedInStatus().then(r => setLinkedIn(r.data)).catch(() => {})
+    getRemoteSettings().then(r => {
+      const s = r.data
+      // Sync remote → local SettingsContext (topics are comma-sep string in API)
+      update({
+        brandName: s.brand_name,
+        brandTone: s.brand_tone,
+        targetAudience: s.target_audience,
+        topics: s.topics ? s.topics.split(',').map(t => t.trim()).filter(Boolean) : settings.topics,
+        postsPerWeek: s.posts_per_week,
+        minutesPerPost: s.minutes_per_post,
+        webhookUrl: s.webhook_url,
+      })
+    }).catch(() => {})
+
+    // LinkedIn connection status from URL params (after OAuth callback)
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('linkedin') === 'connected') {
+      toast.success('✅ LinkedIn conectado correctamente')
+      getLinkedInStatus().then(r => setLinkedIn(r.data)).catch(() => {})
+      window.history.replaceState({}, '', '/settings')
+    }
+    if (params.get('linkedin') === 'error') {
+      toast.error('Error al conectar LinkedIn — revisa las credenciales')
+      window.history.replaceState({}, '', '/settings')
+    }
+  }, [isDemo]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSave = async () => {
+    setSaving(true)
+    // Always update localStorage
+    try {
+      if (!isDemo) {
+        await saveRemoteSettings({
+          brand_name: settings.brandName,
+          brand_tone: settings.brandTone,
+          target_audience: settings.targetAudience,
+          topics: settings.topics.join(','),
+          active_channels: settings.activeChannels.join(','),
+          posts_per_week: settings.postsPerWeek,
+          minutes_per_post: settings.minutesPerPost,
+          webhook_url: settings.webhookUrl || '',
+        })
+        toast.success('✅ Configuración guardada en el servidor')
+      } else {
+        toast.success('✅ Configuración guardada localmente (modo demo)')
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {
+      toast.error('Error al guardar — intenta de nuevo')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDisconnectLinkedIn = async () => {
+    try {
+      await disconnectLinkedIn()
+      setLinkedIn(l => ({ ...l, connected: false, person_urn: null }))
+      toast.success('LinkedIn desconectado')
+    } catch {
+      toast.error('Error al desconectar')
+    }
   }
 
   const toggleChannel = (key) => {
@@ -132,9 +203,9 @@ export default function SettingsPage() {
           <button onClick={handleReset} className="btn-ghost">
             <RotateCcw className="w-4 h-4" /> Restaurar
           </button>
-          <button onClick={handleSave} className="btn-primary">
+          <button onClick={handleSave} disabled={saving} className="btn-primary">
             {saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-            {saved ? 'Guardado' : 'Guardar'}
+            {saving ? 'Guardando…' : saved ? 'Guardado' : 'Guardar'}
           </button>
         </div>
       </div>
@@ -366,6 +437,71 @@ export default function SettingsPage() {
           </div>
         </Section>
 
+        {/* LinkedIn OAuth */}
+        <Section icon={Linkedin} title="Conexión con LinkedIn">
+          <p className="text-xs text-slate-400 dark:text-galaxy-500 mb-4">
+            Conecta tu cuenta para publicar directamente desde el dashboard. Usa OAuth 2.0 — nunca almacenamos tu contraseña.
+          </p>
+
+          {isDemo ? (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl
+                            bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50">
+              <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                <span className="font-semibold">Modo demo</span> — la integración de LinkedIn requiere backend activo.
+              </p>
+            </div>
+          ) : !linkedIn.configured ? (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl
+                            bg-slate-50 dark:bg-galaxy-900/50 border border-slate-200 dark:border-galaxy-600">
+              <AlertCircle className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              <div>
+                <p className="text-sm text-slate-600 dark:text-galaxy-300 font-medium">LinkedIn OAuth no configurado</p>
+                <p className="text-xs text-slate-400 dark:text-galaxy-500 mt-0.5">
+                  Añade <code className="font-mono bg-slate-100 dark:bg-galaxy-800 px-1 rounded">LINKEDIN_CLIENT_ID</code> y{' '}
+                  <code className="font-mono bg-slate-100 dark:bg-galaxy-800 px-1 rounded">LINKEDIN_CLIENT_SECRET</code> en tu <code className="font-mono">.env</code>
+                </p>
+              </div>
+            </div>
+          ) : linkedIn.connected ? (
+            <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl
+                            bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
+                  <Linkedin className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5" /> Cuenta conectada
+                  </p>
+                  {linkedIn.person_urn && (
+                    <p className="text-xs text-slate-400 dark:text-galaxy-500 font-mono mt-0.5">
+                      {linkedIn.person_urn}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={handleDisconnectLinkedIn}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                           text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all border border-red-200 dark:border-red-800/50"
+              >
+                <Link2Off className="w-3.5 h-3.5" /> Desconectar
+              </button>
+            </div>
+          ) : (
+            <a
+              href={getLinkedInAuthUrl()}
+              className="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold
+                         bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+            >
+              <Linkedin className="w-4 h-4" />
+              Conectar con LinkedIn
+              <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+            </a>
+          )}
+        </Section>
+
         {/* ROI config */}
         <Section icon={ChevronDown} title="Parámetros de ROI">
           <p className="text-xs text-slate-400 dark:text-galaxy-500 mb-4">
@@ -404,9 +540,9 @@ export default function SettingsPage() {
         <button onClick={handleReset} className="btn-ghost">
           <RotateCcw className="w-4 h-4" /> Restaurar defaults
         </button>
-        <button onClick={handleSave} className="btn-primary">
+        <button onClick={handleSave} disabled={saving} className="btn-primary">
           {saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-          {saved ? '¡Guardado!' : 'Guardar configuración'}
+          {saving ? 'Guardando…' : saved ? '¡Guardado!' : 'Guardar configuración'}
         </button>
       </div>
     </div>

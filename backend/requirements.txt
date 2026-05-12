@@ -20,3 +20,5 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 # Observability
 sentry-sdk[fastapi]==2.19.2
+# Rate limiting
+slowapi==0.1.9

@@ -62,6 +62,43 @@ class ContentDraft(Base):
 
     trend = relationship("Trend", back_populates="drafts")
     publish_jobs = relationship("PublishJob", back_populates="draft", cascade="all, delete-orphan")
+    versions = relationship("DraftVersion", back_populates="draft", cascade="all, delete-orphan",
+                            order_by="desc(DraftVersion.version_number)")
+
+
+class DraftVersion(Base):
+    """Immutable snapshot of a draft body/title — created on every edit."""
+    __tablename__ = "draft_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    draft_id = Column(Integer, ForeignKey("content_drafts.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(500))
+    body = Column(Text, nullable=False)
+    version_number = Column(Integer, nullable=False, default=1)
+    note = Column(String(200), default="Editado por usuario")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    draft = relationship("ContentDraft", back_populates="versions")
+
+
+class UserSettings(Base):
+    """Per-user brand configuration — feeds into AI prompts."""
+    __tablename__ = "user_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_email = Column(String(255), unique=True, nullable=False, index=True)
+    brand_name = Column(String(200), default="Mi Empresa")
+    brand_tone = Column(String(100), default="profesional")
+    target_audience = Column(Text, default="Profesionales de tecnología y startups en LATAM")
+    topics = Column(Text, default="Inteligencia Artificial,SaaS,Marketing Digital,Startups,Productividad")
+    active_channels = Column(String(300), default="linkedin,blog,newsletter")
+    posts_per_week = Column(Integer, default=3)
+    minutes_per_post = Column(Integer, default=45)
+    webhook_url = Column(String(500), default="")
+    # LinkedIn OAuth tokens (stored after OAuth flow)
+    linkedin_access_token = Column(Text)
+    linkedin_person_urn = Column(String(200))
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class PublishJob(Base):

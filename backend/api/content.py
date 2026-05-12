@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Response
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 from typing import List, Optional
@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from datetime import datetime
 
 from database import get_db
-from models import ContentDraft, Trend, PublishJob, ChannelEnum, StatusEnum
+from models import ContentDraft, DraftVersion, Trend, PublishJob, ChannelEnum, StatusEnum
 
 router = APIRouter(prefix="/content", tags=["content"])
 
@@ -80,14 +80,53 @@ class ContentStats(BaseModel):
     published: int
 
 
+class BulkActionIn(BaseModel):
+    ids: List[int]
+    action: str  # "approve" | "reject" | "delete"
+
+
+class DraftVersionOut(BaseModel):
+    id: int
+    version_number: int
+    title: Optional[str]
+    body: str
+    note: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ── Helper ─────────────────────────────────────────────────────────────────────
+
+def _save_version(db: Session, draft: ContentDraft, note: str = "Editado por usuario"):
+    """Snapshots current draft state as a new version record."""
+    last = (
+        db.query(DraftVersion)
+        .filter(DraftVersion.draft_id == draft.id)
+        .order_by(desc(DraftVersion.version_number))
+        .first()
+    )
+    next_ver = (last.version_number + 1) if last else 1
+    v = DraftVersion(
+        draft_id=draft.id,
+        title=draft.title,
+        body=draft.body,
+        version_number=next_ver,
+        note=note,
+    )
+    db.add(v)
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/", response_model=List[ContentDraftOut])
 def list_drafts(
     skip: int = 0,
-    limit: int = 50,
+    limit: int = 20,
     status: Optional[str] = None,
     channel: Optional[str] = None,
+    response: Response = None,
     db: Session = Depends(get_db),
 ):
     query = (
@@ -99,6 +138,10 @@ def list_drafts(
         query = query.filter(ContentDraft.status == status)
     if channel:
         query = query.filter(ContentDraft.channel == channel)
+    total = query.count()
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
+        response.headers["Access-Control-Expose-Headers"] = "X-Total-Count"
     return query.offset(skip).limit(limit).all()
 
 
@@ -139,11 +182,36 @@ def generate_content(trend_id: int, db: Session = Depends(get_db)):
     return {"message": f"Content generation queued for trend {trend_id}"}
 
 
+@router.post("/bulk")
+def bulk_action(data: BulkActionIn, db: Session = Depends(get_db)):
+    """Approve, reject, or delete multiple drafts in one request."""
+    affected = 0
+    for draft_id in data.ids:
+        draft = db.query(ContentDraft).filter(ContentDraft.id == draft_id).first()
+        if not draft:
+            continue
+        if data.action == "approve" and draft.status in (StatusEnum.pending, StatusEnum.rejected):
+            draft.status = StatusEnum.approved
+            draft.updated_at = datetime.utcnow()
+            affected += 1
+        elif data.action == "reject" and draft.status != StatusEnum.published:
+            draft.status = StatusEnum.rejected
+            draft.updated_at = datetime.utcnow()
+            affected += 1
+        elif data.action == "delete":
+            db.delete(draft)
+            affected += 1
+    db.commit()
+    return {"affected": affected, "action": data.action}
+
+
 @router.patch("/{draft_id}", response_model=ContentDraftOut)
 def update_draft(draft_id: int, data: ContentDraftUpdate, db: Session = Depends(get_db)):
     draft = db.query(ContentDraft).filter(ContentDraft.id == draft_id).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
+    # Snapshot current state before overwriting
+    _save_version(db, draft, note="Editado por usuario")
     if data.title is not None:
         draft.title = data.title
     if data.body is not None:
@@ -201,3 +269,46 @@ def delete_draft(draft_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Draft not found")
     db.delete(draft)
     db.commit()
+
+
+# ── Version history ────────────────────────────────────────────────────────────
+
+@router.get("/{draft_id}/versions", response_model=List[DraftVersionOut])
+def list_versions(draft_id: int, db: Session = Depends(get_db)):
+    """Returns all snapshots for a draft, newest first."""
+    return (
+        db.query(DraftVersion)
+        .filter(DraftVersion.draft_id == draft_id)
+        .order_by(desc(DraftVersion.version_number))
+        .all()
+    )
+
+
+@router.post("/{draft_id}/versions/{version_id}/restore", response_model=ContentDraftOut)
+def restore_version(draft_id: int, version_id: int, db: Session = Depends(get_db)):
+    """Restores a previous version (saves current state first)."""
+    version = (
+        db.query(DraftVersion)
+        .filter(DraftVersion.id == version_id, DraftVersion.draft_id == draft_id)
+        .first()
+    )
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    draft = (
+        db.query(ContentDraft)
+        .options(joinedload(ContentDraft.trend), joinedload(ContentDraft.publish_jobs))
+        .filter(ContentDraft.id == draft_id)
+        .first()
+    )
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    # Snapshot current state before restoring
+    _save_version(db, draft, note=f"Antes de restaurar v{version.version_number}")
+    draft.title = version.title
+    draft.body = version.body
+    draft.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(draft)
+    return draft

@@ -48,4 +48,26 @@ export const rejectDraft = (id) => api.post(`/content/${id}/reject`)
 export const publishDraft = (id) => api.post(`/content/${id}/publish`)
 export const deleteDraft = (id) => api.delete(`/content/${id}`)
 
+// Bulk actions
+export const bulkAction = (ids, action) => api.post('/content/bulk', { ids, action })
+
+// Version history
+export const getDraftVersions = (id) => api.get(`/content/${id}/versions`)
+export const restoreVersion = (draftId, versionId) =>
+  api.post(`/content/${draftId}/versions/${versionId}/restore`)
+
+// ── User Settings ─────────────────────────────────────────────────────────────
+export const getRemoteSettings = () => api.get('/settings/')
+export const saveRemoteSettings = (data) => api.put('/settings/', data)
+export const disconnectLinkedIn = () => api.delete('/settings/linkedin')
+
+// LinkedIn OAuth — opens in the same tab (redirects through backend)
+export const getLinkedInStatus = () => api.get('/auth/linkedin/status')
+export const getLinkedInAuthUrl = () => {
+  const base = import.meta.env.VITE_API_URL
+    ? `${import.meta.env.VITE_API_URL}/api`
+    : '/api'
+  return `${base}/auth/linkedin`
+}
+
 export default api

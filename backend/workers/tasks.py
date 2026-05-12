@@ -3,8 +3,8 @@ from datetime import datetime
 
 from workers.celery_app import celery_app
 from database import SessionLocal
-from models import Trend, ContentDraft, PublishJob, SourceEnum, ChannelEnum, StatusEnum
-from config import settings
+from models import Trend, ContentDraft, DraftVersion, PublishJob, UserSettings, SourceEnum, ChannelEnum, StatusEnum
+from config import settings as settings_config
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def monitor_trends_task(self):
             scores = score_trends_batch(new_items)
 
             for item, relevance in zip(new_items, scores):
-                if relevance < settings.MIN_RELEVANCE_SCORE:
+                if relevance < settings_config.MIN_RELEVANCE_SCORE:
                     skipped_low_score += 1
                     logger.debug(f"[Task] Descartado (score {relevance}): {item['title'][:60]}")
                     continue
@@ -115,6 +115,15 @@ def generate_content_task(self, trend_id: int):
         from generators.blog import generate_blog_post
         from generators.newsletter import generate_newsletter_item
 
+        # ── Read brand voice settings from DB ────────────────────────────────
+        brand = db.query(UserSettings).filter(
+            UserSettings.user_email == settings_config.DEMO_EMAIL
+        ).first()
+        brand_name = brand.brand_name if brand else ""
+        tone = brand.brand_tone if brand else "profesional"
+        audience = brand.target_audience if brand else ""
+        logger.info(f"[Task] Brand voice: '{brand_name}' / '{tone}' for trend {trend_id}")
+
         generators = {
             ChannelEnum.linkedin: generate_linkedin_post,
             ChannelEnum.blog: generate_blog_post,
@@ -123,7 +132,7 @@ def generate_content_task(self, trend_id: int):
 
         import time
         channels_generated = []
-        for i, channel_str in enumerate(settings.content_channels_list):
+        for i, channel_str in enumerate(settings_config.content_channels_list):
             # Pausa entre canales para respetar el rate limit del free tier
             if i > 0:
                 time.sleep(5)
@@ -135,6 +144,9 @@ def generate_content_task(self, trend_id: int):
                     title=trend.title,
                     summary=trend.summary or "",
                     url=trend.url or "",
+                    brand_name=brand_name,
+                    tone=tone,
+                    audience=audience,
                 )
 
                 draft = ContentDraft(
@@ -151,6 +163,16 @@ def generate_content_task(self, trend_id: int):
                     generation_cost_usd=result.get("generation_cost_usd"),
                 )
                 db.add(draft)
+                db.flush()  # get draft.id
+                # Save version 1 — original AI-generated snapshot
+                v1 = DraftVersion(
+                    draft_id=draft.id,
+                    title=draft.title,
+                    body=draft.body,
+                    version_number=1,
+                    note="Generado por IA",
+                )
+                db.add(v1)
                 channels_generated.append(channel_str)
                 logger.info(f"[Task] Borrador generado: {channel_str} para trend {trend_id}")
 

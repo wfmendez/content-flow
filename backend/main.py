@@ -1,13 +1,17 @@
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from config import settings
 from database import init_db
 from api.trends import router as trends_router
 from api.content import router as content_router
 from api.auth import router as auth_router
+from api.settings import router as settings_router
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +51,17 @@ async def lifespan(app: FastAPI):
     # Cierre: (nada por ahora)
 
 
+# ── Rate limiter (global) ──────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(
     title="Content-Flow API",
     description="Pipeline de automatización de contenido con IA",
     version="1.0.0",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
@@ -64,9 +73,10 @@ app.add_middleware(
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth_router,    prefix="/api")
-app.include_router(trends_router,  prefix="/api")
-app.include_router(content_router, prefix="/api")
+app.include_router(auth_router,     prefix="/api")
+app.include_router(trends_router,   prefix="/api")
+app.include_router(content_router,  prefix="/api")
+app.include_router(settings_router, prefix="/api")
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

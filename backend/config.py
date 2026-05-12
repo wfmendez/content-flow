@@ -18,9 +18,14 @@ class Settings(BaseSettings):
     REDDIT_CLIENT_SECRET: str = ""
     REDDIT_USER_AGENT: str = "ContentFlow/1.0"
 
-    # LinkedIn
+    # LinkedIn (static token — legacy; OAuth flow replaces this)
     LINKEDIN_ACCESS_TOKEN: str = ""
     LINKEDIN_PERSON_URN: str = ""
+    # LinkedIn OAuth 2.0
+    LINKEDIN_CLIENT_ID: str = ""
+    LINKEDIN_CLIENT_SECRET: str = ""
+    LINKEDIN_REDIRECT_URI: str = "http://localhost:8000/api/auth/linkedin/callback"
+    FRONTEND_URL: str = "http://localhost:3000"
 
     # Email
     SMTP_HOST: str = "smtp.gmail.com"

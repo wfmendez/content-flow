@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from database import get_db
 from models import Trend, SourceEnum
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/trends", tags=["trends"])
 
@@ -75,8 +79,9 @@ def get_trend(trend_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/fetch", status_code=202)
-def trigger_fetch():
-    """Dispara manualmente el monitoreo de tendencias."""
+@limiter.limit("5/minute")
+async def trigger_fetch(request: Request):
+    """Dispara manualmente el monitoreo de tendencias. Rate-limited: 5/min."""
     from workers.tasks import monitor_trends_task
     monitor_trends_task.delay()
     return {"message": "Trend fetch queued"}
